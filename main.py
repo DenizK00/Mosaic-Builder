@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog
 from PIL import Image
 import os
+import numpy as np
 
 class MosaicBuilder:
     def __init__(self, master):
@@ -18,7 +19,9 @@ class MosaicBuilder:
     def load_image(self):
         self.image_path = filedialog.askopenfilename()
         # Load the main image
-        self.main_image = Image.open(self.image_path)
+        self.main_image = Image.open(self.image_path).convert('RGB')  # Convert to RGB
+        self.main_image_arr = np.asarray(self.main_image)
+        return self.main_image_arr
 
     def create_mosaic(self):
         # Load small images from a specified directory
@@ -57,6 +60,7 @@ class MosaicBuilder:
                 small_images.append(Image.open(img_path))
         return small_images
 
+    
 if __name__ == "__main__":
     root = tk.Tk()
     app = MosaicBuilder(root)
