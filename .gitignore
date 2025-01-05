@@ -1,2 +1,6 @@
 
 /foo_images
+
+.env
+/uploads
+/venv
