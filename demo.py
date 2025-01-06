@@ -1,15 +1,15 @@
-import sys
+import streamlit as st
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk  # Import Image and ImageTk from PIL
+import tempfile
+from PIL import Image
 from mosaic import mosaic  # Assuming mosaic.py is in the same directory
 
 class MosaicApp:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("Mosaic Image Generator")
-        self.master.geometry("800x600")
+    def __init__(self):
+        st.title("Mosaic Image Generator")
+        self.main_image_path = None
+        self.tiles_directory = None
+        self.mosaic_image_path = None  # To store the path of the generated mosaic image
 
         # Load and display the logo
         self.load_logo()
@@ -22,58 +22,40 @@ class MosaicApp:
         if os.path.exists(logo_path):
             logo_image = Image.open(logo_path)
             logo_image = logo_image.resize((200, 100), Image.LANCZOS)  # Use LANCZOS instead of ANTIALIAS
-            self.logo = ImageTk.PhotoImage(logo_image)
-            self.logo_label = tk.Label(self.master, image=self.logo)
-            self.logo_label.pack(pady=10)  # Add some padding
+            st.image(logo_image, caption="Logo", use_column_width=True)
 
     def create_widgets(self):
         # Load Image Button
-        self.load_image_btn = tk.Button(self.master, text="Load Main Image", command=self.load_image)
-        self.load_image_btn.pack(pady=10)
-
-        # Load Tiles Button
-        self.load_tiles_btn = tk.Button(self.master, text="Load Tiles Directory", command=self.load_tiles)
-        self.load_tiles_btn.pack(pady=10)
+        self.main_image_path = st.file_uploader("Load Main Image", type=["jpg", "jpeg", "png"])
+        
+        # Upload Tiles Images
+        tiles_files = st.file_uploader("Upload Tiles Images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
         # Opacity Slider
-        self.opacity_label = tk.Label(self.master, text="Opacity Level:")
-        self.opacity_label.pack(pady=5)
-        self.opacity_slider = tk.Scale(self.master, from_=0, to=100, orient=tk.HORIZONTAL)
-        self.opacity_slider.set(100)  # Default to 100%
-        self.opacity_slider.pack(pady=5)
+        opacity = st.slider("Opacity Level:", 0, 100, 100)  # Default to 100%
 
         # Generate Mosaic Button
-        self.generate_btn = tk.Button(self.master, text="Generate Mosaic", command=self.generate_mosaic)
-        self.generate_btn.pack(pady=20)
+        if st.button("Generate Mosaic"):
+            if self.main_image_path and tiles_files:
+                try:
+                    # Create a temporary directory to save tiles
+                    with tempfile.TemporaryDirectory() as tmpdirname:
+                        for tile in tiles_files:
+                            tile_path = os.path.join(tmpdirname, tile.name)
+                            with open(tile_path, "wb") as f:
+                                f.write(tile.getbuffer())
+                        
+                        # Generate the mosaic and save it to a file
+                        mosaic(self.main_image_path, tmpdirname, opacity / 100)
+                        st.success("Mosaic generated successfully!")
 
-        # Status Label
-        self.status_label = tk.Label(self.master, text="")
-        self.status_label.pack(pady=10)
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
 
-    def load_image(self):
-        file_path = filedialog.askopenfilename()
-        if file_path:
-            self.main_image_path = file_path
-            self.status_label.config(text="Main image loaded.")
-
-    def load_tiles(self):
-        folder_path = filedialog.askdirectory()
-        if folder_path:
-            self.tiles_directory = folder_path
-            self.status_label.config(text="Tiles directory loaded.")
-
-    def generate_mosaic(self):
-        if hasattr(self, 'main_image_path') and hasattr(self, 'tiles_directory'):
-            opacity = self.opacity_slider.get() / 100
-            try:
-                mosaic(self.main_image_path, self.tiles_directory, opacity)
-                self.status_label.config(text="Mosaic generated successfully!")
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
-        else:
-            messagebox.showerror("Error", "Please load both the main image and tiles directory.")
+        # Display the OUT_FILE if it exists
+        out_file_path = 'mosaic.jpeg'  # Path to the generated mosaic image
+        if os.path.exists(out_file_path):
+            st.image(out_file_path, caption="Mosaic from Root Directory", use_column_width=True)
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = MosaicApp(root)
-    root.mainloop()
+    MosaicApp()
