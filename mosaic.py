@@ -67,6 +67,8 @@ class TileProcessor:
     def get_tiles(self):
         large_tiles = []
         small_tiles = []
+        tile_names = []  # List to store tile names
+        usage_count = {}  # Dictionary to track usage of each tile
 
         print('Reading tiles from {}...'.format(self.tiles_directory))
 
@@ -80,23 +82,33 @@ class TileProcessor:
                     if large_tile:
                         large_tiles.append(large_tile)
                         small_tiles.append(small_tile)
+                        tile_names.append(tile_name)  # Store the tile name
+                        usage_count[tile_name] = 0  # Initialize usage count for the tile
 
         print('Processed {} tiles.'.format(len(large_tiles)))
-        
+
         # If we have fewer tiles than MIN_TILES, duplicate them with variations
         while len(large_tiles) < MIN_TILES:
-            idx = random.randint(0, len(large_tiles) - 1)
+            # Select a tile that has been used the least
+            least_used_tiles = [tile for tile in range(len(tile_names)) if usage_count[tile_names[tile]] < 3]  # Limit to 3 uses
+            if not least_used_tiles:
+                break  # Exit if all tiles have been used too many times
+
+            idx = random.choice(least_used_tiles)
             large_tile = large_tiles[idx].copy()
             small_tile = small_tiles[idx].copy()
-            
+
             # Apply random enhancement to create variation
             enhancer = ImageEnhance.Brightness(large_tile)
             large_tile = enhancer.enhance(random.uniform(0.8, 1.2))
             enhancer = ImageEnhance.Brightness(small_tile)
             small_tile = enhancer.enhance(random.uniform(0.8, 1.2))
-            
+
             large_tiles.append(large_tile)
             small_tiles.append(small_tile)
+
+            # Update usage count
+            usage_count[tile_names[idx]] += 1
 
         return (large_tiles, small_tiles)
 
@@ -132,6 +144,7 @@ class TargetImage:
 
         return (large_img.convert('RGB'), small_img.convert('RGB'))
 
+
 class TileFitter:
     def __init__(self, tiles_data):
         self.tiles_data = tiles_data
@@ -147,7 +160,7 @@ class TileFitter:
             if diff > bail_out_value:
                 return diff
         return diff
-
+    
     def get_best_fit_tile(self, img_data):
         best_fit_tile_index = None
         min_diff = sys.maxsize
@@ -161,6 +174,7 @@ class TileFitter:
             tile_index += 1
 
         return best_fit_tile_index, min_diff
+    
 
 class MosaicImage:
     def __init__(self, original_img):
@@ -207,6 +221,7 @@ class MosaicImage:
         
         self.image.save(path, quality=95)
 
+
 def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity):
     mosaic = MosaicImage(original_img_large)
     active_workers = WORKER_COUNT
@@ -230,6 +245,7 @@ def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity)
     mosaic.save(OUT_FILE)
     print('\nFinished, output is in', OUT_FILE)
 
+
 def fit_tiles(work_queue, result_queue, tiles_data):
     tile_fitter = TileFitter(tiles_data)
 
@@ -245,6 +261,7 @@ def fit_tiles(work_queue, result_queue, tiles_data):
 
     result_queue.put((EOQ_VALUE, EOQ_VALUE, EOQ_VALUE))
 
+
 def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
     print('Building mosaic, press Ctrl-C to abort...')
     original_img_large, original_img_small = original_img
@@ -255,6 +272,8 @@ def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
 
     work_queue = Queue(WORKER_COUNT)
     result_queue = Queue()
+
+    mosaic = MosaicImage(original_img_large)  # Create the mosaic image object
 
     try:
         Process(target=build_mosaic, 
@@ -286,6 +305,13 @@ def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
         for _ in range(WORKER_COUNT):
             work_queue.put((EOQ_VALUE, EOQ_VALUE))
 
+    # Save the mosaic image and return it
+    output_path = OUT_FILE
+    mosaic.save(output_path)
+    print('\nFinished, output is in', output_path)
+    return mosaic.image  # Return the generated mosaic image
+
+
 class ProgressCounter:
     def __init__(self, total):
         self.total = total
@@ -295,14 +321,19 @@ class ProgressCounter:
         self.counter += 1
         print("Progress: {:04.1f}%".format(100 * self.counter / self.total), 
               flush=True, end='\r')
+        
 
 def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY):
     image_data = TargetImage(img_path).get_data()
     tiles_data = TileProcessor(tiles_path).get_tiles()
     if tiles_data[0]:
-        compose(image_data, tiles_data, opacity)
+        mosaic_image = MosaicImage(image_data[0])  # Create the mosaic image object
+        compose(image_data, tiles_data, opacity)  # Build the mosaic
+        return mosaic_image.image  # Return the generated mosaic image
     else:
         print("ERROR: No images found in tiles directory '{}'".format(tiles_path))
+        return None
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
