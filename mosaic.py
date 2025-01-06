@@ -10,6 +10,7 @@ TILE_SIZE = 50  # Increased for better visibility of individual tiles
 TILE_MATCH_RES = 5  # Increased for better matching
 ENLARGEMENT = 2  # Kept the same
 MIN_TILES = 10  # Minimum number of tiles needed
+DEFAULT_OPACITY = 0.3  # Reduced default opacity for more subtle effect
 
 # Auto-calculate tile counts based on image size
 TILE_BLOCK_SIZE = TILE_SIZE / max(min(TILE_MATCH_RES, TILE_SIZE), 1)
@@ -164,25 +165,46 @@ class TileFitter:
 class MosaicImage:
     def __init__(self, original_img):
         self.image = Image.new(original_img.mode, original_img.size)
+        self.original = original_img.copy()  # Keep a copy of the original
         self.x_tile_count = int(original_img.size[0] / TILE_SIZE)
         self.y_tile_count = int(original_img.size[1] / TILE_SIZE)
         self.total_tiles = self.x_tile_count * self.y_tile_count
 
-    def add_tile(self, tile_data, coords, opacity=1.0):
+    def add_tile(self, tile_data, coords, opacity=DEFAULT_OPACITY):
+        # Create tile image
         img = Image.new('RGB', (TILE_SIZE, TILE_SIZE))
         img.putdata(tile_data)
         
-        # Create alpha channel
+        # Create alpha channel with lower opacity
         alpha = Image.new('L', img.size, int(opacity * 255))
         img.putalpha(alpha)
         
-        # Blend with original image
-        self.image.paste(img, coords, img)
+        # Get the corresponding section of the original image
+        orig_section = self.original.crop(coords)
+        
+        # Create a new image for blending
+        blend_image = Image.new('RGBA', img.size)
+        
+        # Paste original section with higher opacity
+        orig_alpha = Image.new('L', img.size, int((1 - opacity * 0.5) * 255))
+        orig_section.putalpha(orig_alpha)
+        blend_image.paste(orig_section, (0, 0))
+        
+        # Blend with the mosaic tile
+        blend_image.alpha_composite(img)
+        
+        # Paste the blended result
+        self.image.paste(blend_image, coords)
 
     def save(self, path):
-        # Final enhancement
+        # Final enhancement with subtle adjustments
         enhancer = ImageEnhance.Sharpness(self.image)
-        self.image = enhancer.enhance(1.2)
+        self.image = enhancer.enhance(1.1)  # Reduced sharpness enhancement
+        
+        # Slightly boost contrast
+        enhancer = ImageEnhance.Contrast(self.image)
+        self.image = enhancer.enhance(1.05)
+        
         self.image.save(path, quality=95)
 
 def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity):
@@ -223,7 +245,7 @@ def fit_tiles(work_queue, result_queue, tiles_data):
 
     result_queue.put((EOQ_VALUE, EOQ_VALUE, EOQ_VALUE))
 
-def compose(original_img, tiles, opacity=1.0):
+def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
     print('Building mosaic, press Ctrl-C to abort...')
     original_img_large, original_img_small = original_img
     tiles_large, tiles_small = tiles
@@ -274,7 +296,7 @@ class ProgressCounter:
         print("Progress: {:04.1f}%".format(100 * self.counter / self.total), 
               flush=True, end='\r')
 
-def mosaic(img_path, tiles_path, opacity=1.0):
+def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY):
     image_data = TargetImage(img_path).get_data()
     tiles_data = TileProcessor(tiles_path).get_tiles()
     if tiles_data[0]:
