@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import tempfile
 from PIL import Image
-from mosaic import mosaic, TileProcessor, TargetImage
+from mosaic import mosaic, TileProcessor, TargetImage, compose
 
 # Cache the tile processing since it's computationally expensive
 @st.cache_data
@@ -35,13 +35,14 @@ def process_target_image(image_file):
 def generate_mosaic(target_image_data, tiles_data, opacity=0.3):
     """Generate and cache the mosaic image"""
     try:
-        from mosaic import compose, MosaicImage
+        # Generate the mosaic directly using compose function
+        mosaic_img = compose(target_image_data, tiles_data, opacity)
         
-        # Create mosaic image object
-        mosaic_img = MosaicImage(target_image_data[0])
+        # Convert to RGB mode if necessary
+        if mosaic_img.mode == 'RGBA':
+            mosaic_img = mosaic_img.convert('RGB')
         
-        # Generate the mosaic and return the image
-        return compose(target_image_data, tiles_data, opacity)  # Return the generated mosaic image
+        return mosaic_img
     except Exception as e:
         st.error(f"Error generating mosaic: {str(e)}")
         return None
@@ -109,26 +110,30 @@ class MosaicApp:
         if st.button("Generate Mosaic", type="primary", disabled=not (self.main_image and self.tiles)):
             if self.main_image and self.tiles:
                 with st.spinner("Processing images..."):
-                    # Process target image
-                    target_data = process_target_image(self.main_image)
-                    
-                    # Process tiles
-                    tiles_data = process_tiles(self.tiles)
-                    
-                    if tiles_data and tiles_data[0]:
-                        # Generate mosaic
-                        st.session_state.mosaic_image = generate_mosaic(
-                            target_data,
-                            tiles_data,
-                            self.opacity
-                        )
+                    try:
+                        # Process target image
+                        target_data = process_target_image(self.main_image)
                         
-                        if st.session_state.mosaic_image:
-                            st.success("Mosaic generated successfully!")
+                        # Process tiles
+                        tiles_data = process_tiles(self.tiles)
+                        
+                        if tiles_data and tiles_data[0]:
+                            # Generate mosaic
+                            mosaic_image = generate_mosaic(
+                                target_data,
+                                tiles_data,
+                                self.opacity
+                            )
+                            
+                            if mosaic_image:
+                                st.session_state.mosaic_image = mosaic_image
+                                st.success("Mosaic generated successfully!")
+                            else:
+                                st.error("Failed to generate mosaic")
                         else:
-                            st.error("Failed to generate mosaic")
-                    else:
-                        st.error("No valid tiles were processed")
+                            st.error("No valid tiles were processed")
+                    except Exception as e:
+                        st.error(f"Error during mosaic generation: {str(e)}")
 
         # Display the mosaic if it exists
         if st.session_state.mosaic_image:

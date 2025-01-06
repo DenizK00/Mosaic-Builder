@@ -183,6 +183,7 @@ class MosaicImage:
         self.x_tile_count = int(original_img.size[0] / TILE_SIZE)
         self.y_tile_count = int(original_img.size[1] / TILE_SIZE)
         self.total_tiles = self.x_tile_count * self.y_tile_count
+        self.last_tile_used = {}  # Dictionary to track the last tile used at each position
 
     def add_tile(self, tile_data, coords, opacity=DEFAULT_OPACITY):
         # Create tile image
@@ -210,6 +211,17 @@ class MosaicImage:
         # Paste the blended result
         self.image.paste(blend_image, coords)
 
+    def get_random_tile(self, all_tile_data_large, last_tile_index):
+        """Select a random tile that is not the same as the last used tile."""
+        tile_count = len(all_tile_data_large)
+        new_tile_index = last_tile_index
+        
+        # Ensure the new tile is different from the last one
+        while new_tile_index == last_tile_index:
+            new_tile_index = random.randint(0, tile_count - 1)
+        
+        return new_tile_index
+
     def save(self, path):
         # Final enhancement with subtle adjustments
         enhancer = ImageEnhance.Sharpness(self.image)
@@ -226,6 +238,8 @@ def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity)
     mosaic = MosaicImage(original_img_large)
     active_workers = WORKER_COUNT
     
+    last_tile_index = None  # Track the last tile index used
+
     while True:
         try:
             img_coords, best_fit_tile_index, fit_quality = result_queue.get()
@@ -236,8 +250,13 @@ def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity)
                     break
             else:
                 # Use the provided opacity
+                # Get a random tile that is not the same as the last used tile
+                best_fit_tile_index = mosaic.get_random_tile(all_tile_data_large, last_tile_index)
                 tile_data = all_tile_data_large[best_fit_tile_index]
                 mosaic.add_tile(tile_data, img_coords, opacity)
+
+                # Update the last tile index used
+                last_tile_index = best_fit_tile_index
 
         except KeyboardInterrupt:
             pass
