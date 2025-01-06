@@ -4,3 +4,4 @@
 .env
 /uploads
 /venv
+*.pyc

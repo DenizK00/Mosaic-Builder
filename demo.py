@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import tempfile
 from PIL import Image
-from mosaic import mosaic  # Assuming mosaic.py is in the same directory
+from mosaic import mosaic  # Ensure this imports the correct mosaic function
 
 class MosaicApp:
     def __init__(self):
@@ -46,16 +46,16 @@ class MosaicApp:
                                 f.write(tile.getbuffer())
                         
                         # Generate the mosaic and save it to a file
-                        mosaic(self.main_image_path, tmpdirname, opacity / 100)
+                        mosaic(self.main_image_path, tmpdirname, opacity / 100)  # Pass opacity as a fraction
                         st.success("Mosaic generated successfully!")
+
+                        # Display the newly created mosaic image
+                        out_file_path = 'mosaic.jpeg'  # Path to the generated mosaic image
+                        if os.path.exists(out_file_path):
+                            st.image(out_file_path, caption="Latest Mosaic", use_column_width=True, clamp=True)
 
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
-
-        # Display the OUT_FILE if it exists
-        out_file_path = 'mosaic.jpeg'  # Path to the generated mosaic image
-        if os.path.exists(out_file_path):
-            st.image(out_file_path, caption="Mosaic from Root Directory", use_column_width=True)
 
 if __name__ == "__main__":
     MosaicApp()
