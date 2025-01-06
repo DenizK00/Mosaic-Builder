@@ -2,8 +2,8 @@ import sys
 import os, os.path
 from PIL import Image, ImageOps
 from multiprocessing import Process, Queue, cpu_count
-import tkinter as tk
-from tkinter import filedialog, messagebox
+# import tkinter as tk
+# from tkinter import filedialog, messagebox
 
 # Change these 3 config parameters to suit your needs...
 TILE_SIZE      = 50		# height/width of mosaic tiles in pixels
