@@ -149,8 +149,18 @@ class TargetImage:
 class TileFitter:
     def __init__(self, tiles_data):
         self.tiles_data = tiles_data
-
-    def __get_tile_diff(self, t1, t2, bail_out_value):
+        # Store average brightness for each tile
+        self.tile_brightness = [self._calculate_brightness(tile) for tile in tiles_data]
+    
+    def _calculate_brightness(self, tile_data):
+        """Calculate the average brightness of a tile."""
+        if not tile_data:
+            return 0
+        # Using the first pixel as a sample since tiles are already processed to be uniform
+        total = sum(tile_data[0]) / 3  # Average of RGB
+        return total / 255.0  # Normalize to 0-1
+    
+    def _get_tile_diff(self, t1, t2, bail_out_value):
         diff = 0
         for i in range(len(t1)):
             # Improved color difference calculation using weighted RGB
@@ -162,29 +172,66 @@ class TileFitter:
                 return diff
         return diff
     
-    def get_best_fit_tile(self, img_data):
-        best_fit_tile_index = None
-        min_diff = sys.maxsize
-        tile_index = 0
+    def get_best_fit_tiles(self, img_data, num_candidates=10):
+        """Returns multiple good tile matches instead of just the best one."""
+        differences = []
+        target_brightness = self._calculate_brightness(img_data)
+        
+        for idx, tile_data in enumerate(self.tiles_data):
+            # Calculate color difference
+            color_diff = self._get_tile_diff(img_data, tile_data, sys.maxsize)
+            # Calculate brightness difference
+            brightness_diff = abs(target_brightness - self.tile_brightness[idx])
+            
+            # Combined score (weighted sum of color and brightness differences)
+            total_diff = color_diff * 0.7 + (brightness_diff * 255) * 0.3
+            differences.append((idx, total_diff))
+        
+        # Sort by difference and return top candidates
+        differences.sort(key=lambda x: x[1])
+        return differences[:num_candidates]
 
-        for tile_data in self.tiles_data:
-            diff = self.__get_tile_diff(img_data, tile_data, min_diff)
-            if diff < min_diff:
-                min_diff = diff
-                best_fit_tile_index = tile_index
-            tile_index += 1
-
-        return best_fit_tile_index, min_diff
-    
 
 class MosaicImage:
     def __init__(self, original_img):
         self.image = Image.new(original_img.mode, original_img.size)
-        self.original = original_img.copy()  # Keep a copy of the original
+        self.original = original_img.copy()
         self.x_tile_count = int(original_img.size[0] / TILE_SIZE)
         self.y_tile_count = int(original_img.size[1] / TILE_SIZE)
         self.total_tiles = self.x_tile_count * self.y_tile_count
-        self.last_tile_used = {}  # Dictionary to track the last tile used at each position
+        self.recent_tiles = []  # Track recently used tiles
+        self.max_recent = 50    # Number of recent tiles to track
+    
+    def select_tile(self, candidates, used_tiles):
+        """Select a tile from candidates while maintaining variety."""
+        # Filter out recently used tiles if possible
+        available_candidates = [c for c in candidates if c[0] not in self.recent_tiles]
+        
+        if not available_candidates:
+            available_candidates = candidates
+        
+        # Weight candidates by their ranking
+        weights = []
+        total_candidates = len(available_candidates)
+        for i, (idx, diff) in enumerate(available_candidates):
+            # Higher weight for better matches, but still give some chance to others
+            weight = (total_candidates - i) ** 2
+            weights.append(weight)
+        
+        # Normalize weights
+        total_weight = sum(weights)
+        weights = [w / total_weight for w in weights]
+        
+        # Select tile using weights
+        selected_idx = random.choices(range(len(available_candidates)), weights=weights, k=1)[0]
+        tile_idx = available_candidates[selected_idx][0]
+        
+        # Update recent tiles
+        self.recent_tiles.append(tile_idx)
+        if len(self.recent_tiles) > self.max_recent:
+            self.recent_tiles.pop(0)
+        
+        return tile_idx
 
     def add_tile(self, tile_data, coords, opacity=DEFAULT_OPACITY):
         # Create tile image
@@ -212,15 +259,36 @@ class MosaicImage:
         # Paste the blended result
         self.image.paste(blend_image, coords)
 
-    def get_random_tile(self, all_tile_data_large, last_tile_index):
-        """Select a random tile that is not the same as the last used tile."""
+    def get_average_color(self, tile_data):
+        """Calculate the average color of a tile."""
+        r, g, b = 0, 0, 0
+        for pixel in tile_data:
+            r += pixel[0]
+            g += pixel[1]
+            b += pixel[2]
+        count = len(tile_data)
+        return (r // count, g // count, b // count)
+
+    def get_random_tile(self, all_tile_data_large, last_tile_index, used_tiles):
+        """Select a random tile that is not the same as the last used tile and ensures all tiles are used."""
         tile_count = len(all_tile_data_large)
-        new_tile_index = last_tile_index
         
-        # Ensure the new tile is different from the last one
-        while new_tile_index == last_tile_index:
-            new_tile_index = random.randint(0, tile_count - 1)
+        # If all tiles have been used, reset the used_tiles list
+        if len(used_tiles) == tile_count:
+            used_tiles.clear()
+
+        # Select a tile that hasn't been used yet
+        available_tiles = [i for i in range(tile_count) if i not in used_tiles and i != last_tile_index]
         
+        if available_tiles:
+            new_tile_index = random.choice(available_tiles)
+        else:
+            # If all tiles have been used, allow reuse
+            new_tile_index = last_tile_index
+
+        # Add the selected tile to the used list
+        used_tiles.append(new_tile_index)
+
         return new_tile_index
 
     def save(self, path):
@@ -236,50 +304,50 @@ class MosaicImage:
 
 
 def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity):
-    print("Starting mosaic generation...")  # Debug statement
+    print("Starting mosaic generation...")
     mosaic = MosaicImage(original_img_large)
     active_workers = WORKER_COUNT
+    used_tiles = set()
     
-    last_tile_index = None  # Track the last tile index used
-
     while True:
         try:
-            img_coords, best_fit_tile_index, fit_quality = result_queue.get()
-
+            img_coords, candidates = result_queue.get()
+            
             if img_coords == EOQ_VALUE:
                 active_workers -= 1
                 if not active_workers:
                     break
             else:
-                # Use the provided opacity
-                best_fit_tile_index = mosaic.get_random_tile(all_tile_data_large, last_tile_index)
+                # Select tile using the new weighted selection system
+                best_fit_tile_index = mosaic.select_tile(candidates, used_tiles)
+                used_tiles.add(best_fit_tile_index)
+                
                 tile_data = all_tile_data_large[best_fit_tile_index]
                 mosaic.add_tile(tile_data, img_coords, opacity)
-
-                # Update the last tile index used
-                last_tile_index = best_fit_tile_index
-
+                
         except KeyboardInterrupt:
             pass
-
+    
     mosaic.save(OUT_FILE)
-    print('\nFinished, output is in', OUT_FILE)  # This should only print once
+    print('\nFinished, output is in', OUT_FILE)
 
 
 def fit_tiles(work_queue, result_queue, tiles_data):
     tile_fitter = TileFitter(tiles_data)
-
+    
     while True:
         try:
             img_data, img_coords = work_queue.get(True)
             if img_data == EOQ_VALUE:
                 break
-            tile_index, fit_quality = tile_fitter.get_best_fit_tile(img_data)
-            result_queue.put((img_coords, tile_index, fit_quality))
+            
+            # Get multiple candidate tiles instead of just one
+            candidate_tiles = tile_fitter.get_best_fit_tiles(img_data)
+            result_queue.put((img_coords, candidate_tiles))
         except KeyboardInterrupt:
             pass
-
-    result_queue.put((EOQ_VALUE, EOQ_VALUE, EOQ_VALUE))
+    
+    result_queue.put((EOQ_VALUE, EOQ_VALUE))
 
 
 def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
