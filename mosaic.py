@@ -4,6 +4,7 @@ from PIL import Image, ImageOps, ImageEnhance
 from multiprocessing import Process, Queue, cpu_count
 import random
 import math
+import time  # Make sure to import the time module
 
 # Improved configuration parameters
 TILE_SIZE = 50  # Increased for better visibility of individual tiles
@@ -235,6 +236,7 @@ class MosaicImage:
 
 
 def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity):
+    print("Starting mosaic generation...")  # Debug statement
     mosaic = MosaicImage(original_img_large)
     active_workers = WORKER_COUNT
     
@@ -250,7 +252,6 @@ def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity)
                     break
             else:
                 # Use the provided opacity
-                # Get a random tile that is not the same as the last used tile
                 best_fit_tile_index = mosaic.get_random_tile(all_tile_data_large, last_tile_index)
                 tile_data = all_tile_data_large[best_fit_tile_index]
                 mosaic.add_tile(tile_data, img_coords, opacity)
@@ -262,7 +263,7 @@ def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity)
             pass
 
     mosaic.save(OUT_FILE)
-    print('\nFinished, output is in', OUT_FILE)
+    print('\nFinished, output is in', OUT_FILE)  # This should only print once
 
 
 def fit_tiles(work_queue, result_queue, tiles_data):
@@ -325,9 +326,9 @@ def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
             work_queue.put((EOQ_VALUE, EOQ_VALUE))
 
     # Save the mosaic image and return it
-    output_path = OUT_FILE
-    mosaic.save(output_path)
-    print('\nFinished, output is in', output_path)
+    # output_path = OUT_FILE
+    # mosaic.save(output_path)
+    # print('\nFinished, output is in', output_path)
     return mosaic.image  # Return the generated mosaic image
 
 
@@ -347,8 +348,12 @@ def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY):
     tiles_data = TileProcessor(tiles_path).get_tiles()
     if tiles_data[0]:
         mosaic_image = MosaicImage(image_data[0])  # Create the mosaic image object
-        compose(image_data, tiles_data, opacity)  # Build the mosaic
-        return mosaic_image.image  # Return the generated mosaic image
+        compose(image_data, tiles_data, opacity)  # Generate and save the mosaic image
+        
+        time.sleep(1)  # Wait for a short duration to ensure the image is fully generated
+        
+        # Load the saved image to display
+        return Image.open(OUT_FILE)  # Return the generated mosaic image from the file
     else:
         print("ERROR: No images found in tiles directory '{}'".format(tiles_path))
         return None
