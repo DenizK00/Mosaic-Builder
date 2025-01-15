@@ -326,7 +326,7 @@ class MosaicImage:
         self.image.save(path, quality=95)
 
 
-def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity):
+def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity, out_file):
     print("Starting mosaic generation...")
     mosaic = MosaicImage(original_img_large)
     active_workers = WORKER_COUNT
@@ -351,8 +351,8 @@ def build_mosaic(result_queue, all_tile_data_large, original_img_large, opacity)
         except KeyboardInterrupt:
             pass
     
-    mosaic.save(OUT_FILE)
-    print('\nFinished, output is in', OUT_FILE)
+    mosaic.save(out_file)  # Save to the unique output file
+    print('\nFinished, output is in', out_file)
 
 
 def fit_tiles(work_queue, result_queue, tiles_data):
@@ -373,7 +373,7 @@ def fit_tiles(work_queue, result_queue, tiles_data):
     result_queue.put((EOQ_VALUE, EOQ_VALUE))
 
 
-def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
+def compose(original_img, tiles, opacity=DEFAULT_OPACITY, out_file=OUT_FILE):
     print('Building mosaic, press Ctrl-C to abort...')
     original_img_large, original_img_small = original_img
     tiles_large, tiles_small = tiles
@@ -388,7 +388,7 @@ def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
 
     try:
         Process(target=build_mosaic, 
-                args=(result_queue, all_tile_data_large, original_img_large, opacity)).start()
+                args=(result_queue, all_tile_data_large, original_img_large, opacity, out_file)).start()
 
         for _ in range(WORKER_COUNT):
             Process(target=fit_tiles, 
@@ -416,10 +416,6 @@ def compose(original_img, tiles, opacity=DEFAULT_OPACITY):
         for _ in range(WORKER_COUNT):
             work_queue.put((EOQ_VALUE, EOQ_VALUE))
 
-    # Save the mosaic image and return it
-    # output_path = OUT_FILE
-    # mosaic.save(output_path)
-    # print('\nFinished, output is in', output_path)
     return mosaic.image  # Return the generated mosaic image
 
 
@@ -434,19 +430,32 @@ class ProgressCounter:
               flush=True, end='\r')
         
 
-def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, resolution=(2400, 2400)):
+def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, out_file=OUT_FILE):
+    print(f"Starting mosaic generation for {img_path} with tiles from {tiles_path}")
+    
+    # Ensure that each call to mosaic is independent
     image_data = TargetImage(img_path).get_data()
     tiles_data = TileProcessor(tiles_path).get_tiles()
+    
     if tiles_data[0]:
         mosaic_image = MosaicImage(image_data[0])  # Create the mosaic image object
-        compose(image_data, tiles_data, opacity)  # Generate and save the mosaic image
+        try:
+            compose(image_data, tiles_data, opacity, out_file)  # Generate and save the mosaic image
+            print(f"Mosaic saved to {out_file}")  # Log successful save
+        except Exception as e:
+            print(f"Error during mosaic composition: {str(e)}")  # Log any errors
+            return None
         
         time.sleep(1)  # Wait for a short duration to ensure the image is fully generated
         
         # Load the saved image to display
-        return Image.open(OUT_FILE)  # Return the generated mosaic image from the file
+        if os.path.exists(out_file):
+            return Image.open(out_file)  # Return the generated mosaic image from the file
+        else:
+            print(f"ERROR: Generated file does not exist at {out_file}")
+            return None
     else:
-        print("ERROR: No images found in tiles directory '{}'".format(tiles_path))
+        print(f"ERROR: No images found in tiles directory '{tiles_path}'")
         return None
 
 
