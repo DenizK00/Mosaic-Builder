@@ -7,13 +7,14 @@ import math
 import time  # Make sure to import the time module
 
 # Improved configuration parameters
-TILE_SIZE = 50  # Increased for better visibility of individual tiles
-TILE_MATCH_RES = 5  # Increased for better matching
-ENLARGEMENT = 2  # Kept the same
-MIN_TILES = 10  # Minimum number of tiles needed
-DEFAULT_OPACITY = 0.3  # Reduced default opacity for more subtle effect
+TILE_SIZE = 60  # Base tile size
+TILE_MATCH_RES = 20  # Increased for more precise matching
+ENLARGEMENT = 2
+MIN_TILES = 10
+DEFAULT_OPACITY = 0.3
 
-# Auto-calculate tile counts based on image size
+# Enhanced tile processing parameters
+SMALL_TILE_SCALE = 6  # Higher scale factor for better quality small tiles
 TILE_BLOCK_SIZE = TILE_SIZE / max(min(TILE_MATCH_RES, TILE_SIZE), 1)
 WORKER_COUNT = max(cpu_count() - 1, 1)
 OUT_FILE = 'mosaic.jpeg'
@@ -28,12 +29,15 @@ class TileProcessor:
             img = Image.open(tile_path)
             img = ImageOps.exif_transpose(img)
 
-            # Enhance the tile image
+            # Enhanced image processing
             enhancer = ImageEnhance.Contrast(img)
-            img = enhancer.enhance(1.2)  # Slightly increase contrast
+            img = enhancer.enhance(1.2)
             
             enhancer = ImageEnhance.Color(img)
-            img = enhancer.enhance(1.1)  # Slightly increase color saturation
+            img = enhancer.enhance(1.2)  # Increased color enhancement
+            
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(1.3)  # Added sharpness enhancement
 
             # Get the largest square from the image
             w, h = img.size
@@ -42,23 +46,33 @@ class TileProcessor:
             h_crop = (h - min_dimension) / 2
             img = img.crop((w_crop, h_crop, w - w_crop, h - h_crop))
 
-            # Create multiple variations of each tile
+            # Create multiple variations with improved quality
             variations = []
             for angle in [0, 90, 180, 270]:
-                rotated = img.rotate(angle, expand=True)
-                # Add both normal and flipped versions
+                rotated = img.rotate(angle, expand=True, resample=Image.BICUBIC)
                 variations.extend([
                     rotated,
                     ImageOps.mirror(rotated),
                     ImageOps.flip(rotated)
                 ])
 
-            # Randomly select a variation
             img = random.choice(variations)
 
+            # Create large tile with high quality
             large_tile_img = img.resize((TILE_SIZE, TILE_SIZE), Image.LANCZOS)
-            small_tile_img = img.resize((int(TILE_SIZE/TILE_BLOCK_SIZE), 
-                                       int(TILE_SIZE/TILE_BLOCK_SIZE)), Image.LANCZOS)
+            
+            # Create small tile with enhanced resolution
+            small_tile_size = int(TILE_SIZE * SMALL_TILE_SCALE / TILE_BLOCK_SIZE)
+            small_tile_img = img.resize((small_tile_size, small_tile_size), Image.LANCZOS)
+            
+            # Apply additional enhancements to small tile
+            enhancer = ImageEnhance.Sharpness(small_tile_img)
+            small_tile_img = enhancer.enhance(1.2)
+            
+            # Removed the Detail enhancement as it does not exist
+            # You can add other enhancements if needed, like Brightness or Contrast
+            enhancer = ImageEnhance.Contrast(small_tile_img)
+            small_tile_img = enhancer.enhance(1.1)  # Optional contrast enhancement
 
             return (large_tile_img.convert('RGB'), small_tile_img.convert('RGB'))
         except Exception as e:
@@ -68,47 +82,56 @@ class TileProcessor:
     def get_tiles(self):
         large_tiles = []
         small_tiles = []
-        tile_names = []  # List to store tile names
-        usage_count = {}  # Dictionary to track usage of each tile
+        tile_names = []
+        usage_count = {}
 
         print('Reading tiles from {}...'.format(self.tiles_directory))
 
-        # Search the tiles directory recursively
+        # Enhanced recursive tile processing
         for root, _, files in os.walk(self.tiles_directory):
             for tile_name in files:
-                if tile_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                if tile_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):  # Added TIFF support
                     print('Reading {:40.40}'.format(tile_name), flush=True, end='\r')
                     tile_path = os.path.join(root, tile_name)
                     large_tile, small_tile = self.__process_tile(tile_path)
-                    if large_tile:
+                    if large_tile and small_tile:  # Ensure both tiles are processed successfully
                         large_tiles.append(large_tile)
                         small_tiles.append(small_tile)
-                        tile_names.append(tile_name)  # Store the tile name
-                        usage_count[tile_name] = 0  # Initialize usage count for the tile
+                        tile_names.append(tile_name)
+                        usage_count[tile_name] = 0
 
         print('Processed {} tiles.'.format(len(large_tiles)))
 
-        # If we have fewer tiles than MIN_TILES, duplicate them with variations
+        # Improved tile duplication with enhanced variations
         while len(large_tiles) < MIN_TILES:
-            # Select a tile that has been used the least
-            least_used_tiles = [tile for tile in range(len(tile_names)) if usage_count[tile_names[tile]] < 3]  # Limit to 3 uses
+            least_used_tiles = [tile for tile in range(len(tile_names)) 
+                              if usage_count[tile_names[tile]] < 3]
+            
             if not least_used_tiles:
-                break  # Exit if all tiles have been used too many times
+                break
 
             idx = random.choice(least_used_tiles)
             large_tile = large_tiles[idx].copy()
             small_tile = small_tiles[idx].copy()
 
-            # Apply random enhancement to create variation
-            enhancer = ImageEnhance.Brightness(large_tile)
-            large_tile = enhancer.enhance(random.uniform(0.8, 1.2))
-            enhancer = ImageEnhance.Brightness(small_tile)
-            small_tile = enhancer.enhance(random.uniform(0.8, 1.2))
+            # Apply enhanced variations
+            brightness_factor = random.uniform(0.85, 1.15)
+            contrast_factor = random.uniform(0.9, 1.1)
+            color_factor = random.uniform(0.95, 1.05)
+
+            # Apply enhancements to both large and small tiles
+            for tile in [large_tile, small_tile]:
+                enhancer = ImageEnhance.Brightness(tile)
+                tile = enhancer.enhance(brightness_factor)
+                
+                enhancer = ImageEnhance.Contrast(tile)
+                tile = enhancer.enhance(contrast_factor)
+                
+                enhancer = ImageEnhance.Color(tile)
+                tile = enhancer.enhance(color_factor)
 
             large_tiles.append(large_tile)
             small_tiles.append(small_tile)
-
-            # Update usage count
             usage_count[tile_names[idx]] += 1
 
         return (large_tiles, small_tiles)
@@ -411,7 +434,7 @@ class ProgressCounter:
               flush=True, end='\r')
         
 
-def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY):
+def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, resolution=(2400, 2400)):
     image_data = TargetImage(img_path).get_data()
     tiles_data = TileProcessor(tiles_path).get_tiles()
     if tiles_data[0]:
