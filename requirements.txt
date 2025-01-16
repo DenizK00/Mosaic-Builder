@@ -2,3 +2,4 @@ fastapi==0.115.6
 Pillow==11.1.0
 streamlit==1.40.1
 uvicorn==0.34.0
+python-multipart
