@@ -1,5 +1,4 @@
-Flask==2.2.5
-Flask_Cors==5.0.0
-numpy==2.2.1
+fastapi==0.115.6
 Pillow==11.1.0
 streamlit==1.40.1
+uvicorn==0.34.0
