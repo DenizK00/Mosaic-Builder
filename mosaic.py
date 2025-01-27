@@ -5,6 +5,7 @@ from multiprocessing import Process, Queue, cpu_count
 import random
 import math
 import time  # Make sure to import the time module
+import argparse  # Import argparse for command-line argument parsing
 
 # Improved configuration parameters
 TILE_SIZE = 60  # Base tile size
@@ -19,6 +20,14 @@ TILE_BLOCK_SIZE = TILE_SIZE / max(min(TILE_MATCH_RES, TILE_SIZE), 1)
 WORKER_COUNT = max(cpu_count() - 1, 1)
 OUT_FILE = 'mosaic.jpeg'
 EOQ_VALUE = None
+
+# Define dimensions for A4, A3, A2, A1 in pixels (width, height)
+A_SIZES = {
+    "A4": (2480, 3508),  # A4 size at 300 DPI
+    "A3": (3508, 4961),  # A3 size at 300 DPI
+    "A2": (4961, 7016),  # A2 size at 300 DPI
+    "A1": (7016, 9933)   # A1 size at 300 DPI
+}
 
 class TileProcessor:
     def __init__(self, tiles_directory):
@@ -430,13 +439,24 @@ class ProgressCounter:
               flush=True, end='\r')
         
 
-def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, out_file=OUT_FILE):
+def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, out_file=OUT_FILE, size="A4"):
     print(f"Starting mosaic generation for {img_path} with tiles from {tiles_path}")
     
     # Ensure that each call to mosaic is independent
     image_data = TargetImage(img_path).get_data()
     tiles_data = TileProcessor(tiles_path).get_tiles()
     
+    # Adjust the target size based on the specified size parameter
+    if size in A_SIZES:
+        target_width, target_height = A_SIZES[size]
+    else:
+        print(f"ERROR: Invalid size '{size}'. Defaulting to A4.")
+        target_width, target_height = A_SIZES["A4"]
+
+    # Update the target dimensions in the image data
+    image_data = (image_data[0].resize((target_width, target_height), Image.LANCZOS), 
+                  image_data[1].resize((int(target_width // TILE_BLOCK_SIZE), int(target_height // TILE_BLOCK_SIZE)), Image.LANCZOS))
+
     if tiles_data[0]:
         mosaic_image = MosaicImage(image_data[0])  # Create the mosaic image object
         try:
@@ -460,14 +480,22 @@ def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, out_file=OUT_FILE):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        print('ERROR: Usage: {} <image> <tiles directory>\r'.format(sys.argv[0]))
+    parser = argparse.ArgumentParser(description='Generate a mosaic image.')
+    parser.add_argument('image', type=str, help='Path to the main image')
+    parser.add_argument('tiles_directory', type=str, help='Path to the directory containing tile images')
+    parser.add_argument('--opacity', type=float, default=DEFAULT_OPACITY, help='Opacity of the mosaic tiles')
+    parser.add_argument('--size', type=str, choices=A_SIZES.keys(), default='A4', help='Size of the resulting mosaic (A4, A3, A2, A1)')
+
+    args = parser.parse_args()
+
+    source_image = args.image
+    tile_dir = args.tiles_directory
+    opacity = args.opacity
+    size = args.size
+
+    if not os.path.isfile(source_image):
+        print("ERROR: Unable to find image file '{}'".format(source_image))
+    elif not os.path.isdir(tile_dir):
+        print("ERROR: Unable to find tile directory '{}'".format(tile_dir))
     else:
-        source_image = sys.argv[1]
-        tile_dir = sys.argv[2]
-        if not os.path.isfile(source_image):
-            print("ERROR: Unable to find image file '{}'".format(source_image))
-        elif not os.path.isdir(tile_dir):
-            print("ERROR: Unable to find tile directory '{}'".format(tile_dir))
-        else:
-            mosaic(source_image, tile_dir)
+        mosaic(source_image, tile_dir, opacity, out_file=OUT_FILE, size=size)

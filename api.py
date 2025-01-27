@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks, Body
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -10,6 +10,7 @@ import time
 
 app = FastAPI()
 
+
 # Allow CORS for all origins (you can restrict this in production)
 app.add_middleware(
     CORSMiddleware,
@@ -18,6 +19,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 async def cleanup_files(temp_dir: str):
     """Cleanup temporary files after response is sent"""
@@ -31,12 +33,14 @@ async def cleanup_files(temp_dir: str):
     except Exception as e:
         print(f"Cleanup error: {str(e)}")
 
+
 @app.post("/generate_mosaic")
 async def generate_mosaic(
     background_tasks: BackgroundTasks,
     main_image: UploadFile = File(...),
     tile_images: List[UploadFile] = File(...),
-    opacity: float = Form(default=0.3)
+    opacity: float = Form(default=0.3),
+    size: str = Form(default="A4")
 ):
     # Validate main image
     if not main_image.content_type.startswith('image/'):
@@ -81,7 +85,7 @@ async def generate_mosaic(
 
         # Generate the mosaic image
         try:
-            result_image = mosaic(main_image_path, tiles_dir, opacity, output_path)
+            result_image = mosaic(main_image_path, tiles_dir, opacity, output_path, size)
             print(f"Saving mosaic to {output_path}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Mosaic generation failed: {str(e)}")
@@ -103,6 +107,7 @@ async def generate_mosaic(
         # Clean up files immediately in case of error
         await cleanup_files(temp_dir)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == '__main__':
     import uvicorn
