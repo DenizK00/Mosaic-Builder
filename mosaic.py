@@ -8,14 +8,14 @@ import time  # Make sure to import the time module
 import argparse  # Import argparse for command-line argument parsing
 
 # Improved configuration parameters
-TILE_SIZE = 60  # Base tile size
+TILE_SIZE = 120  # Base tile size
 TILE_MATCH_RES = 20  # Increased for more precise matching
 ENLARGEMENT = 2
 MIN_TILES = 10
 DEFAULT_OPACITY = 0.3
 
 # Enhanced tile processing parameters
-SMALL_TILE_SCALE = 6  # Higher scale factor for better quality small tiles
+SMALL_TILE_SCALE = 40  # Increased scale factor for better quality small tiles
 TILE_BLOCK_SIZE = TILE_SIZE / max(min(TILE_MATCH_RES, TILE_SIZE), 1)
 WORKER_COUNT = max(cpu_count() - 1, 1)
 OUT_FILE = 'mosaic.jpeg'
@@ -76,7 +76,7 @@ class TileProcessor:
             
             # Apply additional enhancements to small tile
             enhancer = ImageEnhance.Sharpness(small_tile_img)
-            small_tile_img = enhancer.enhance(1.2)
+            small_tile_img = enhancer.enhance(1.5)  # Increased sharpness enhancement
             
             # Removed the Detail enhancement as it does not exist
             # You can add other enhancements if needed, like Brightness or Contrast
