@@ -442,35 +442,64 @@ class ProgressCounter:
 def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, out_file=OUT_FILE, size="A4"):
     print(f"Starting mosaic generation for {img_path} with tiles from {tiles_path}")
     
-    # Ensure that each call to mosaic is independent
-    image_data = TargetImage(img_path).get_data()
-    tiles_data = TileProcessor(tiles_path).get_tiles()
-    
-    # Adjust the target size based on the specified size parameter
+    # Get target dimensions based on size parameter
     if size in A_SIZES:
         target_width, target_height = A_SIZES[size]
     else:
         print(f"ERROR: Invalid size '{size}'. Defaulting to A4.")
         target_width, target_height = A_SIZES["A4"]
-
-    # Update the target dimensions in the image data
-    image_data = (image_data[0].resize((target_width, target_height), Image.LANCZOS), 
-                  image_data[1].resize((int(target_width // TILE_BLOCK_SIZE), int(target_height // TILE_BLOCK_SIZE)), Image.LANCZOS))
+    
+    # Load and process initial image data
+    image_data = TargetImage(img_path).get_data()
+    tiles_data = TileProcessor(tiles_path).get_tiles()
+    
+    # Calculate aspect ratios
+    original_aspect = image_data[0].size[0] / image_data[0].size[1]
+    target_aspect = target_width / target_height
+    
+    # Calculate dimensions for cropping
+    if original_aspect > target_aspect:
+        # Image is wider than target: crop width
+        new_width = int(image_data[0].size[1] * target_aspect)
+        new_height = image_data[0].size[1]
+        left = (image_data[0].size[0] - new_width) // 2
+        top = 0
+        right = left + new_width
+        bottom = new_height
+    else:
+        # Image is taller than target: crop height
+        new_width = image_data[0].size[0]
+        new_height = int(image_data[0].size[0] / target_aspect)
+        left = 0
+        top = (image_data[0].size[1] - new_height) // 2
+        right = new_width
+        bottom = top + new_height
+    
+    # Crop and resize the images
+    large_img = image_data[0].crop((left, top, right, bottom))
+    large_img = large_img.resize((target_width, target_height), Image.LANCZOS)
+    
+    # Also adjust the small image accordingly
+    small_img = large_img.resize((int(target_width // TILE_BLOCK_SIZE), 
+                                int(target_height // TILE_BLOCK_SIZE)), 
+                                Image.LANCZOS)
+    
+    # Update image_data tuple with new processed images
+    image_data = (large_img, small_img)
 
     if tiles_data[0]:
-        mosaic_image = MosaicImage(image_data[0])  # Create the mosaic image object
+        mosaic_image = MosaicImage(image_data[0])
         try:
-            compose(image_data, tiles_data, opacity, out_file)  # Generate and save the mosaic image
-            print(f"Mosaic saved to {out_file}")  # Log successful save
+            compose(image_data, tiles_data, opacity, out_file)
+            print(f"Mosaic saved to {out_file}")
         except Exception as e:
-            print(f"Error during mosaic composition: {str(e)}")  # Log any errors
+            print(f"Error during mosaic composition: {str(e)}")
             return None
         
-        time.sleep(1)  # Wait for a short duration to ensure the image is fully generated
+        time.sleep(1)
         
-        # Load the saved image to display
         if os.path.exists(out_file):
-            return Image.open(out_file)  # Return the generated mosaic image from the file
+            return Image.open(out_file)
         else:
             print(f"ERROR: Generated file does not exist at {out_file}")
             return None
