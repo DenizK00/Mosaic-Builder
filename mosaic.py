@@ -479,10 +479,17 @@ def mosaic(img_path, tiles_path, opacity=DEFAULT_OPACITY, out_file=OUT_FILE, siz
     large_img = image_data[0].crop((left, top, right, bottom))
     large_img = large_img.resize((target_width, target_height), Image.LANCZOS)
     
+    # Ensure the dimensions are multiples of TILE_SIZE
+    target_width_adjusted = (target_width // TILE_SIZE) * TILE_SIZE
+    target_height_adjusted = (target_height // TILE_SIZE) * TILE_SIZE
+    
+    # Crop the large image to the adjusted dimensions
+    large_img = large_img.crop((0, 0, target_width_adjusted, target_height_adjusted))
+    
     # Also adjust the small image accordingly
-    small_img = large_img.resize((int(target_width // TILE_BLOCK_SIZE), 
-                                int(target_height // TILE_BLOCK_SIZE)), 
-                                Image.LANCZOS)
+    small_img = large_img.resize((int(target_width_adjusted // TILE_BLOCK_SIZE), 
+                                   int(target_height_adjusted // TILE_BLOCK_SIZE)), 
+                                  Image.LANCZOS)
     
     # Update image_data tuple with new processed images
     image_data = (large_img, small_img)
