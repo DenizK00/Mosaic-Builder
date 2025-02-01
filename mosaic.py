@@ -520,7 +520,7 @@ if __name__ == '__main__':
     parser.add_argument('image', type=str, help='Path to the main image')
     parser.add_argument('tiles_directory', type=str, help='Path to the directory containing tile images')
     parser.add_argument('--opacity', type=float, default=DEFAULT_OPACITY, help='Opacity of the mosaic tiles')
-    parser.add_argument('--size', type=str, choices=A_SIZES.keys(), default='A4', help='Size of the resulting mosaic (A4, A3, A2, A1)')
+    parser.add_argument('--size', type=str, choices=A_SIZES.keys(), default='A1', help='Size of the resulting mosaic (A4, A3, A2, A1)')
 
     args = parser.parse_args()
 

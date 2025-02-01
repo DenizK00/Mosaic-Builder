@@ -36,6 +36,9 @@ class MosaicApp:
             file_path = os.path.join(directory, uploaded_file.name)
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
+            if os.path.getsize(file_path) == 0:  # Check if the file is empty
+                st.error(f"Uploaded file '{uploaded_file.name}' is empty.")
+                return None
             return file_path
         return None
 
@@ -83,8 +86,8 @@ class MosaicApp:
                         for tile in self.tiles:
                             self.save_uploaded_file(tile, tiles_dir)
                         
-                        # Generate mosaic using the mosaic.py functions
-                        result_image = mosaic(main_image_path, tiles_dir, self.opacity)
+                        # Generate mosaic using the mosaic.py functions with A1 size
+                        result_image = mosaic(main_image_path, tiles_dir, self.opacity, size="A1")
                         
                         if result_image:
                             st.session_state.mosaic_image = result_image
