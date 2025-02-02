@@ -22,12 +22,19 @@ class MosaicApp:
         with st.sidebar:
             st.header("Settings")
             self.opacity = st.slider("Tile Opacity", 0.0, 1.0, 0.3, 0.1)
+            self.size = st.selectbox(
+                "Output Size",
+                options=["A1", "A2", "A3", "A4"],
+                index=0,  # Default to A4
+                help="Select the output size for your mosaic"
+            )
             st.info("""
             How it works:
             1. Upload a main image
             2. Upload multiple tile images (at least 10)
             3. Adjust opacity if needed
-            4. Click Generate Mosaic
+            4. Select output size
+            5. Click Generate Mosaic
             """)
 
     def save_uploaded_file(self, uploaded_file, directory):
@@ -86,8 +93,8 @@ class MosaicApp:
                         for tile in self.tiles:
                             self.save_uploaded_file(tile, tiles_dir)
                         
-                        # Generate mosaic using the mosaic.py functions with A1 size
-                        result_image = mosaic(main_image_path, tiles_dir, self.opacity, size="A1")
+                        # Generate mosaic using the mosaic.py functions with selected size
+                        result_image = mosaic(main_image_path, tiles_dir, self.opacity, size=self.size)
                         
                         if result_image:
                             st.session_state.mosaic_image = result_image
